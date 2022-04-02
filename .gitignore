@@ -11,6 +11,7 @@
 # Test binary, built with `go test -c`
 *.test
 testing/csv-examples/private-*.csv
+testing/databases/private*
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
