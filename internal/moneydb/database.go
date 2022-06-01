@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Database struct {
@@ -17,7 +19,7 @@ type Database struct {
 	mutex    sync.Mutex
 }
 
-type Group []struct {
+type Group struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
@@ -106,18 +108,14 @@ func OpenOrCreateInFolder(localDir, name string) (*Database, error) {
 	}
 
 	if exists {
+		logrus.Infof("open existing db from %q", localDir)
 		db, err := OpenFromFolder(localDir)
 		if err != nil {
 			return nil, err
 		}
-		if db.Name != name {
-			db.Name = name
-			if err := db.Save(); err != nil {
-				return nil, err
-			}
-		}
 		return db, nil
 	}
+	logrus.Infof("create new db in %q", localDir)
 	return CreateInFolder(localDir, name)
 }
 
