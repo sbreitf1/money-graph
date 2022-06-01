@@ -12,6 +12,7 @@
 *.test
 testing/csv-examples/private-*.csv
 testing/databases/private*
+.runtime
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
