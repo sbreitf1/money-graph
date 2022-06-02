@@ -17,7 +17,12 @@ var (
 	patternSparkasseCSVDay = regexp.MustCompile(`^\s*(\d+)\.(\d+)\.(\d+)\s*$`)
 )
 
-func (db *Database) ImportCSV(path string) error {
+type ImportResult struct {
+	TotalCount  int
+	ImportCount int
+}
+
+func (db *Database) ImportCSV(path string) (ImportResult, error) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
@@ -25,7 +30,7 @@ func (db *Database) ImportCSV(path string) error {
 
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return ImportResult{}, err
 	}
 	defer f.Close()
 
@@ -33,7 +38,7 @@ func (db *Database) ImportCSV(path string) error {
 	csvReader.Comma = ';'
 	records, err := csvReader.ReadAll()
 	if err != nil {
-		return err
+		return ImportResult{}, err
 	}
 
 	var entryParser func([][]string) ([]Entry, error)
@@ -41,17 +46,17 @@ func (db *Database) ImportCSV(path string) error {
 	case db.isSparkasseCSV(records[0]):
 		entryParser = db.parseSparkasseCSVEntries
 	default:
-		return fmt.Errorf("unrecognized headers: %v", records[0])
+		return ImportResult{}, fmt.Errorf("unrecognized headers: %v", records[0])
 	}
 
 	entries, err := entryParser(records[1:])
 	if err != nil {
-		return err
+		return ImportResult{}, err
 	}
 
 	logrus.Debugf("reading csv file took %v", time.Since(tOpenFile))
 
-	return db.addEntries(entries)
+	return db.importEntries(entries)
 }
 
 func (db *Database) isSparkasseCSV(header []string) bool {
@@ -149,7 +154,7 @@ func (db *Database) parseSparkasseCSVEntries(records [][]string) ([]Entry, error
 	return entries, nil
 }
 
-func (db *Database) addEntries(entries []Entry) error {
+func (db *Database) importEntries(entries []Entry) (ImportResult, error) {
 	tBegin := time.Now()
 
 	chunks := make(map[chunkDescriptor]*chunk)
@@ -163,14 +168,14 @@ func (db *Database) addEntries(entries []Entry) error {
 			var err error
 			chunk, err = db.loadChunk(desc)
 			if err != nil {
-				return fmt.Errorf("load chunk %v: %s", desc, err.Error())
+				return ImportResult{}, fmt.Errorf("load chunk %v: %s", desc, err.Error())
 			}
 			chunks[desc] = chunk
 		}
 
 		added, err := chunk.AddEntry(e)
 		if err != nil {
-			return fmt.Errorf("add entry %d to chunk %v: %s", i, desc, err.Error())
+			return ImportResult{}, fmt.Errorf("add entry %d to chunk %v: %s", i, desc, err.Error())
 		}
 		if added {
 			addedCount++
@@ -181,10 +186,10 @@ func (db *Database) addEntries(entries []Entry) error {
 
 	for _, c := range chunks {
 		if err := db.saveChunk(c); err != nil {
-			return fmt.Errorf("save chunk %v: %s", c.desc, err.Error())
+			return ImportResult{}, fmt.Errorf("save chunk %v: %s", c.desc, err.Error())
 		}
 	}
 
 	logrus.Debugf("adding and writing entries took %v", time.Since(tBegin))
-	return nil
+	return ImportResult{TotalCount: len(entries), ImportCount: addedCount}, nil
 }
